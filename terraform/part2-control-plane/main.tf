@@ -1,4 +1,3 @@
-
 ############################################
 # Provider
 ############################################
@@ -8,7 +7,7 @@ provider "google" {
 }
 
 ############################################
-# Read Cloud SQL details from Part 1 (remote state)
+# Remote state from Part 1 (Cloud SQL)
 ############################################
 data "terraform_remote_state" "db" {
   backend = "gcs"
@@ -34,49 +33,33 @@ resource "google_compute_instance" "control_plane" {
   }
 
   network_interface {
-    network       = "default"
-    access_config {} # ephemeral public IP
+    network = "default"
+    access_config {}
   }
 
-  # Startup script: install BindPlane Control Plane and configure DB
-  # Using a *literal* heredoc (<<-'EOF') to avoid unwanted interpolation in the script.
-  metadata_startup_script = <<-'EOF'
-    #!/bin/bash
-    set -euo pipefail
+  metadata_startup_script = <<EOF
+#!/bin/bash
+set -e
 
-    apt-get update -y
-    apt-get install -y jq curl
+echo "Installing BindPlane Control Plane..."
+curl -sSL https://observiq.com/install-bindplane.sh | bash
 
-    echo "Installing BindPlane Control Plane..."
-    curl -sSL https://observiq.com/install-bindplane.sh | bash
+echo "Configuring BindPlane with Cloud SQL..."
 
-    echo "Configuring BindPlane with Cloud SQL..."
-    bindplane setup \
-      --db-host "${data.terraform_remote_state.db.outputs.db_ip}" \
-      --db-port "${data.terraform_remote_state.db.outputs.db_port}" \
-      --db-user "${data.terraform_remote_state.db.outputs.db_user}" \
-      --db-admin "${var.db_admin}" \
-      --db-password "${var.db_password}" \
-      --db-name "${data.terraform_remote_state.db.outputs.db_name}" \
-      --admin-password "${var.admin_password}"
+bindplane setup \
+  --db-host ${data.terraform_remote_state.db.outputs.db_ip} \
+  --db-port ${data.terraform_remote_state.db.outputs.db_port} \
+  --db-user ${data.terraform_remote_state.db.outputs.db_user} \
+  --db-password ${var.db_password} \
+  --db-name ${data.terraform_remote_state.db.outputs.db_name} \
+  --admin-password ${var.admin_password}
 
-    echo "Creating agent API key locally on Control Plane..."
-    bindplane api-keys create demo-agent --json | jq -r '.key' > /opt/bindplane/agent-api.key
-    chmod 600 /opt/bindplane/agent-api.key
+echo "Creating agent API key..."
+bindplane api-keys create demo-agent --json | jq -r '.key' > /opt/bindplane/agent-api.key
+chmod 600 /opt/bindplane/agent-api.key
 
-    echo "BindPlane Control Plane setup completed"
-  EOF
-
-  service_account {
-    # Default compute service account is used. If you need a custom SA, set the email explicitly.
-    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-  }
-
-  labels = {
-    app  = "bindplane"
-    role = "control-plane"
-    env  = "demo"
-  }
+echo "BindPlane Control Plane setup completed"
+EOF
 }
 
 ############################################
