@@ -7,7 +7,7 @@ provider "google" {
 }
 
 ############################################
-# Remote state from Part 1 – Cloud SQL
+# Remote State – Part 1 (Cloud SQL)
 ############################################
 data "terraform_remote_state" "db" {
   backend = "gcs"
@@ -43,13 +43,27 @@ set -euo pipefail
 
 echo "Updating OS and installing prerequisites..."
 apt-get update -y
-apt-get install -y curl jq
+apt-get install -y \
+  curl \
+  jq \
+  ca-certificates \
+  gnupg
+
+echo "Adding ObservIQ GPG key..."
+curl -fsSL https://packages.observiq.com/apt/repo-signing-key.gpg \
+  | gpg --dearmor -o /usr/share/keyrings/observiq.gpg
+
+echo "Adding ObservIQ APT repository..."
+echo "deb [signed-by=/usr/share/keyrings/observiq.gpg] https://packages.observiq.com/apt stable main" \
+  > /etc/apt/sources.list.d/observiq.list
+
+echo "Updating package index..."
+apt-get update -y
 
 echo "Installing BindPlane Control Plane..."
-curl -sSL https://bindplane.com/install.sh | sudo bash
+apt-get install -y bindplane
 
 echo "Configuring BindPlane with Cloud SQL PostgreSQL..."
-
 bindplane setup \
   --db-host ${data.terraform_remote_state.db.outputs.db_host} \
   --db-port ${data.terraform_remote_state.db.outputs.db_port} \
@@ -58,7 +72,7 @@ bindplane setup \
   --db-name ${data.terraform_remote_state.db.outputs.db_name} \
   --admin-password ${var.admin_password}
 
-echo "BindPlane Control Plane setup completed successfully"
+echo "BindPlane Control Plane installation and configuration completed"
 SCRIPT
 
   service_account {
@@ -70,6 +84,6 @@ SCRIPT
 # Outputs
 ############################################
 output "control_plane_ip" {
-  description = "Public IP address of BindPlane Control Plane"
+  description = "Public IP of BindPlane Control Plane"
   value       = google_compute_instance.control_plane.network_interface[0].access_config[0].nat_ip
 }
