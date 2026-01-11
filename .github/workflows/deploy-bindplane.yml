@@ -11,11 +11,11 @@ env:
   TF_VAR_admin_password: ${{ secrets.BINDPLANE_ADMIN_PASSWORD }}
 
 # =========================================================
-# PART 1 – CLOUD SQL POSTGRESQL
+# PART 1 – CLOUD SQL POSTGRESQL (IDEMPOTENT)
 # =========================================================
 jobs:
   part1-db:
-    name: Part 1 – Cloud SQL PostgreSQL (Wait Until ACTIVE)
+    name: Part 1 – Cloud SQL PostgreSQL (Import if Exists)
     runs-on: ubuntu-latest
 
     steps:
@@ -39,20 +39,43 @@ jobs:
         working-directory: terraform/part1-db
         run: terraform init
 
-      - name: Terraform Apply – Cloud SQL (Import if exists)
+      - name: Terraform Apply – Cloud SQL (Import instance, DB & user if exist)
         working-directory: terraform/part1-db
         run: |
           set -e
 
-          echo "Checking if Cloud SQL instance bp-postgres already exists..."
-          if gcloud sql instances describe bp-postgres \
-            --project "${{ secrets.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            echo "Cloud SQL already exists. Importing into Terraform state..."
-            terraform import google_sql_database_instance.postgres bp-postgres || true
-          else
-            echo "Cloud SQL does not exist. It will be created."
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          INSTANCE_NAME="bp-postgres"
+          DB_NAME="bindplane"
+          DB_USER="bindplane"
+
+          echo "Checking Cloud SQL instance..."
+          if gcloud sql instances describe "$INSTANCE_NAME" \
+            --project "$PROJECT_ID" >/dev/null 2>&1; then
+            echo "Importing existing Cloud SQL instance"
+            terraform import google_sql_database_instance.postgres "$INSTANCE_NAME" || true
           fi
 
+          echo "Checking Cloud SQL database..."
+          if gcloud sql databases describe "$DB_NAME" \
+            --instance "$INSTANCE_NAME" \
+            --project "$PROJECT_ID" >/dev/null 2>&1; then
+            echo "Importing existing Cloud SQL database"
+            terraform import google_sql_database.bindplane \
+              "$INSTANCE_NAME/$DB_NAME" || true
+          fi
+
+          echo "Checking Cloud SQL user..."
+          if gcloud sql users list \
+            --instance "$INSTANCE_NAME" \
+            --project "$PROJECT_ID" \
+            --format="value(name)" | grep -q "^$DB_USER$"; then
+            echo "Importing existing Cloud SQL user"
+            terraform import google_sql_user.bindplane \
+              "$INSTANCE_NAME/$DB_USER" || true
+          fi
+
+          echo "Applying Terraform..."
           terraform apply -auto-approve
 
       - name: Wait until Cloud SQL PostgreSQL is ACTIVE
@@ -81,16 +104,13 @@ jobs:
     needs: part1-db
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
@@ -112,7 +132,6 @@ jobs:
               echo "BindPlane Control Plane is ACTIVE"
               exit 0
             fi
-            echo "Control Plane not active yet..."
             sleep 15
           done
           echo "Control Plane did not become ACTIVE"
@@ -127,16 +146,13 @@ jobs:
     needs: part2-control-plane
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
@@ -159,7 +175,6 @@ jobs:
               echo "BindPlane Agent is ACTIVE and registered"
               exit 0
             fi
-            echo "Agent not active yet..."
             sleep 15
           done
           echo "Agent did not become ACTIVE"
