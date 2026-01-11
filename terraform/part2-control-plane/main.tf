@@ -1,8 +1,14 @@
+############################################
+# Provider
+############################################
 provider "google" {
   project = var.project_id
   region  = var.region
 }
 
+############################################
+# Read Cloud SQL outputs from Part 1
+############################################
 data "terraform_remote_state" "db" {
   backend = "gcs"
   config = {
@@ -11,9 +17,12 @@ data "terraform_remote_state" "db" {
   }
 }
 
+############################################
+# BindPlane Control Plane VM
+############################################
 resource "google_compute_instance" "control_plane" {
   name         = "bp-control-plane"
-  machine_type = "e2-micro"
+  machine_type = "e2-micro"          # demo / free-tier friendly
   zone         = "us-central1-a"
 
   boot_disk {
@@ -30,36 +39,33 @@ resource "google_compute_instance" "control_plane" {
 
   metadata_startup_script = <<EOF
 #!/bin/bash
+set -e
+
+echo "Installing BindPlane Control Plane..."
 curl -sSL https://observiq.com/install-bindplane.sh | bash
+
+echo "Configuring BindPlane with Cloud SQL PostgreSQL..."
 
 bindplane setup \
   --db-host ${data.terraform_remote_state.db.outputs.db_ip} \
-  --db-port 5432 \
-  --db-user bindplane \
+  --db-port ${data.terraform_remote_state.db.outputs.db_port} \
+  --db-user ${data.terraform_remote_state.db.outputs.db_user} \
   --db-password ${var.db_password} \
+  --db-name ${data.terraform_remote_state.db.outputs.db_name} \
   --admin-password ${var.admin_password}
 
-# Create API key for agents
-bindplane api-keys create demo-agent --json > /tmp/api.json
+echo "BindPlane Control Plane setup completed"
+
+# Create API key locally on the VM (not exposed to Terraform)
+bindplane api-keys create demo-agent --json | jq -r '.key' > /opt/bindplane/agent-api.key
+chmod 600 /opt/bindplane/agent-api.key
 EOF
 }
 
-# Fetch API key securely
-resource "null_resource" "fetch_api_key" {
-  depends_on = [google_compute_instance.control_plane]
-
-  provisioner "local-exec" {
-    command = <<EOT
-gcloud compute scp bp-control-plane:/tmp/api.json ./api.json --zone us-central1-a
-EOT
-  }
-}
-
+############################################
+# Outputs
+############################################
 output "control_plane_ip" {
-  value = google_compute_instance.control_plane.network_interface[0].access_config[0].nat_ip
-}
-
-output "bindplane_api_key" {
-  value     = jsondecode(file("./api.json")).key
-  sensitive = true
+  description = "Public IP of BindPlane Control Plane"
+  value       = google_compute_instance.control_plane.network_interface[0].access_config[0].nat_ip
 }
