@@ -34,7 +34,7 @@ resource "google_compute_instance" "control_plane" {
   }
 
   network_interface {
-    network = "default"
+    network       = "default"
     access_config {} # ephemeral public IP
   }
 
@@ -67,6 +67,7 @@ resource "google_compute_instance" "control_plane" {
   EOF
 
   service_account {
+    # Use the default compute service account; specify email here if you need a custom SA
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 
