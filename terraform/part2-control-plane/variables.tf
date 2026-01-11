@@ -1,6 +1,6 @@
 
 ############################################
-# Variables
+# Variables (names must match TF_VAR_* in CI)
 ############################################
 
 variable "project_id" {
