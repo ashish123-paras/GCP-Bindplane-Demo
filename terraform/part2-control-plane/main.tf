@@ -38,7 +38,10 @@ resource "google_compute_instance" "control_plane" {
     access_config {} # ephemeral public IP
   }
 
-  # IMPORTANT: Use <<-EOF (not HTML-escaped) and quote interpolations.
+  # IMPORTANT:
+  # - Proper heredoc <<-EOF (not HTML-escaped)
+  # - HCL interpolation "${...}" (not $var...)
+  # - Quotes around interpolated values
   metadata_startup_script = <<-EOF
     #!/bin/bash
     set -euo pipefail
