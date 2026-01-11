@@ -1,6 +1,10 @@
+variable "project_id" {
+  type = string
+}
 
-variable "project_id" { type = string }
-variable "region"     { type = string }
+variable "region" {
+  type = string
+}
 
 variable "db_password" {
   type      = string
@@ -11,9 +15,3 @@ variable "admin_password" {
   type      = string
   sensitive = true
 }
-
-variable "db_admin" {
-  type      = string
-  sensitive = true
-}
-``
