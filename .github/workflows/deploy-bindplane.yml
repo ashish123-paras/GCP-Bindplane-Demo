@@ -161,15 +161,24 @@ jobs:
       - name: Wait until Agent is ACTIVE (Registered)
         working-directory: terraform/part3-agents
         run: |
+          set -euo pipefail
+
           CP_IP=$(terraform output -raw control_plane_ip)
-          echo "Checking agent registration via BindPlane API"
+          echo "Checking agent registration via BindPlane API at $CP_IP"
+
           for i in {1..30}; do
-            COUNT=$(curl -sf http://$CP_IP:3001/api/v1/agents | jq '.agents | length')
-            if [ "$COUNT" -ge 1 ]; then
+            RESPONSE=$(curl -s http://$CP_IP:3001/api/v1/agents || true)
+
+            echo "Attempt $i response:"
+            echo "$RESPONSE"
+
+            if echo "$RESPONSE" | jq -e '.agents | length > 0' >/dev/null 2>&1; then
               echo "BindPlane Agent is ACTIVE and registered"
               exit 0
             fi
+
             sleep 15
           done
+
           echo "Agent did not become ACTIVE"
           exit 1
