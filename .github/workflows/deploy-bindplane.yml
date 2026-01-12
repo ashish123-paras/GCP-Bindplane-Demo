@@ -159,7 +159,7 @@ jobs:
         run: terraform apply -auto-approve
 
       - name: Wait until Agent is ACTIVE (Registered)
-        working-directory: terraform/part2-control-plane
+        working-directory: terraform/part3-agents
         run: |
           CP_IP=$(terraform output -raw control_plane_ip)
           echo "Checking agent registration via BindPlane API"
