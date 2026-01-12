@@ -65,7 +65,7 @@ echo "BindPlane Control Plane installation and configuration completed"
 SCRIPT
 
   service_account {
-    scopes = ["https://765840863932-compute@developer.gserviceaccount.com"]
+    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
 }
 
