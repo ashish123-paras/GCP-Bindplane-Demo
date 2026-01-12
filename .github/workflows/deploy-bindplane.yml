@@ -141,6 +141,14 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify GCP identity
+        run: |
+          gcloud auth list
+          gsutil ls gs://bindplane-tf-state-demo1
 
       - name: Terraform Init – Agent
         working-directory: terraform/part3-agents
