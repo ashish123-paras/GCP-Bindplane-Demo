@@ -164,11 +164,18 @@ jobs:
           set -euo pipefail
 
           CP_IP=$(terraform output -raw control_plane_ip)
+
+          if [ -z "$CP_IP" ]; then
+            echo "ERROR: control_plane_ip is empty"
+            exit 1
+          fi
+          
           echo "Checking agent registration via BindPlane API at $CP_IP"
 
           for i in {1..30}; do
             RESPONSE=$(curl -s http://$CP_IP:3001/api/v1/agents || true)
-
+            COUNT=$(echo "$RESP" | jq -r '.agents | length // 0')
+            
             echo "Attempt $i response:"
             echo "$RESPONSE"
 
