@@ -163,25 +163,33 @@ jobs:
         run: |
           set -euo pipefail
 
-          CP_IP=$(terraform output -raw control_plane_ip)
-          echo "Checking agent registration via BindPlane API at $CP_IP"
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-          RESPONSE=""
-          COUNT=0
+          CP_IP=$(terraform output -raw control_plane_ip 2>/dev/null || true)
+
+          if [ -z "$CP_IP" ]; then
+            echo "❌ control_plane_ip output is empty"
+            exit 1
+          fi
+
+          echo "Checking agent registration via BindPlane API at $CP_IP"
 
           for i in {1..30}; do
             RESPONSE=$(curl -s http://$CP_IP:3001/api/v1/agents || true)
-            COUNT=$(echo "$RESPONSE" | jq -r '.agents | length // 0')
-            
-            echo "Attempt $i response: $RESPONSE"
 
-           if [ "$COUNT" -gt 0 ]; then
+            echo "Attempt $i raw response:"
+            echo "$RESPONSE"
+
+            COUNT=$(echo "$RESPONSE" | jq -r '.agents | length' 2>/dev/null || echo 0)
+
+            if [[ "$COUNT" =~ ^[0-9]+$ ]] && [ "$COUNT" -gt 0 ]; then
               echo "✅ BindPlane Agent is ACTIVE and registered"
               exit 0
-           fi
+            fi
 
-            sleep 15
+           sleep 15
           done
 
-          echo "Agent did not become ACTIVE"
+          echo "❌ Agent did not become ACTIVE"
           exit 1
